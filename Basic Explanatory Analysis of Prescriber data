@@ -1,0 +1,38 @@
+require(data.table)
+data<-c("prescriber.detailed.csv","prescriber.summary.csv")
+data
+
+# Explonatory Data Analysis
+names(pddata)-#column names
+str(pddata)
+n <-sum(!is.na(pddata))-#Number oof Missing values in data
+  
+#benecount- Claims less than 11 suppressed as Blanl(NA)
+#recode
+pddata$bene_count[is.na(pddata$bene_count)] <- "Less than 11"  
+
+#histogram to check normality
+hist<-hist(pddata$total_claim_count,breaks=seq(0,3400,by=25), col="blue", xlab="Claim Count Distribution")
+den<- density(pddata$total_claim_count)
+plot(den)
+
+#T-test to find the both variables are statistically significant
+t.test(pddata$total_claim_count,pddata$total_day_supply)
+
+#funcrion to conduct the multiple test on variables
+multi.tests <- function(fun = t.test, df, vars, group.var, ...) {
+  sapply(simplify = FALSE,                                    # sapply(simplify=T) better, elements named
+         vars,                                                # loop on vector of outcome variable names
+         function(var) {
+           formula <- as.formula(paste(var, "~", group.var))# create a formula with outcome and grouping var.
+           fun(data = df, formula, ...)                     # perform test with a given fun, default t.test
+         }
+  )
+}
+plot <- multi.tests(fun = plot,
+                    df = pddata,
+                    vars = c("total_claim_count","total_day_supply"),
+                    group.var = "drug_name")
+
+barplot(table(pddata$nppes_provider_state)#state wise distribution
+barplot(table(pddata$nppes_provider_city) #provider city wise distribution
