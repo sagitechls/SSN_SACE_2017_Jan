@@ -1,0 +1,64 @@
+prescriber_detailed <- read_excel("G:/sagitec/prescriber.detailed.xlsx")
+prescriber_summary <- read_excel("G:/sagitec/prescriber.summary.xlsx")
+
+
+summary(prescriber_detailed)
+prescriber_detailed$bene_count<-as.numeric(prescriber_detailed$bene_count)
+
+prescriber_detailed$bene_count[which(is.na(prescriber_detailed$bene_count))]<-5
+
+pres<-merge(prescriber_detailed,prescriber_summary,by="doc_id")
+summary(pres)
+
+drug_name<-c("AVONEX","COPAXONE")
+
+pres$total_drug_cost_ge65<-as.numeric(pres$total_drug_cost_ge65)
+pres$brand_drug_cost<-as.numeric(pres$brand_drug_cost)
+pres$generic_drug_cost<-as.numeric(pres$generic_drug_cost)
+pres$other_drug_cost<-as.numeric(pres$other_drug_cost)
+pres$total_day_supply_ge65<-as.numeric(pres$total_day_supply_ge65)
+
+
+prescriber<-pres %>% 
+  select(doc_id,nppes_provider_city.x,nppes_provider_state.x,bene_count.x,total_claim_count.x,
+                   total_day_supply.x,total_drug_cost.x,bene_count.y,total_claim_count.y,total_drug_cost.y,
+                   total_day_supply.y,bene_count_ge65,bene_count_ge65_suppress_flag,total_claim_count_ge65,
+                   ge65_suppress_flag,total_drug_cost_ge65,total_day_supply_ge65,brand_claim_count,brand_suppress_flag,
+                   brand_drug_cost,generic_claim_count,generic_suppress_flag,generic_drug_cost,
+                   other_claim_count,other_suppress_flag,
+                   other_drug_cost,drug_name) %>% filter(drug_name %in% c("AVONEX","COPAXONE"))
+
+str(prescriber)
+
+
+prescriber$nppes_provider_city.x<-as.factor(prescriber$nppes_provider_city.x)
+prescriber$nppes_provider_state.x<-as.factor(prescriber$nppes_provider_state.x)
+prescriber$drug_name<-as.factor(prescriber$drug_name)
+
+prescriber$doc_id<-NULL
+prescriber$bene_count_ge65_suppress_flag<-NULL
+prescriber$ge65_suppress_flag<-NULL
+prescriber$brand_suppress_flag<-NULL
+prescriber$generic_suppress_flag<-NULL
+prescriber$other_suppress_flag<-NULL
+prescriber$nppes_provider_city.x<-NULL
+prescriber$nppes_provider_state.x<-NULL
+
+summary(prescriber)
+
+write.csv(prescriber,"prescriber.csv")
+
+
+set.seed(123)
+pres_sample<-sample.split(prescriber$drug_name,SplitRatio = .8)
+pres_train<-subset(prescriber,pres_sample==T)
+pres_test<-subset(prescriber,pres_sample==F)
+
+
+rf<-randomForest(pres_train$drug_name~.,data = pres_train,na.action = na.omit)
+
+varImp(rf)
+
+prediction<-predict(rf,pres_test)
+conf<-confusionMatrix(prediction,pres_test$drug_name)
+conf
