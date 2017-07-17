@@ -1,0 +1,69 @@
+#facts
+#1) classifiaction for Gilenya & Copaxone
+#2) cluster is done by Hierarchical Cluster Analysis
+#3) cluster shows that prescribing pattern based on most significant factors such as hcpcs_class,nppes_provider_state,generic name
+
+#packages used 
+setwd("C:\\Users\\anand.shankar\\Desktop\\Sagitec\\Files")
+getwd()
+library(dplyr)
+install.packages("h2o")
+library(h2o)
+library(data.table)
+library(sqldf)
+library(corrplot)
+library(randomForest)
+library(digest)
+library(ggplot)
+library(mice)
+library(VIM)
+
+#load the datasets using Fread to reduce complexity of laoding large datasets
+prescribersummary<- fread("prescriber.summary.csv", stringsAsFactors = T)
+
+pusummary<-fread("PUF.summary.csv", stringsAsFactors = T)
+
+prescriberdetail<-fread("prescriber.detailed.csv", stringsAsFactors = T)
+
+PUFdetail<-fread("PUF.detailed.csv", stringsAsFactors = T)
+
+result1new=scale(result1)#to standardise values
+
+# to merge using doc id as common
+result1 = sqldf("select * from prescriberdetail
+                JOIN PUFdetail USING(doc_id)")
+
+#plot missing values in dataset
+aggr_plot <- aggr(result1, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(result1), cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+
+#mice package has a function known as md.pattern().  It returns a tabular form of missing value present in each variable in a data set.
+md.pattern(result1)
+
+#imputing missing values using 'mice' package
+mice(result1, m=5, maxit = 50, method = 'pmm', seed = 500)
+
+#combine results of all 5 models
+result1 <- pool(result1)
+summary(result1)
+
+#conversion
+result1$hcpcs_class<-as.factor(result1$hcpcs_class)
+result1$hcpcs_drug_indicator<-as.factor(result1$hcpcs_drug_indicator)
+result1$drug_name<-as.factor(result1$drug_name)
+result1$nppes_provider_state<-as.factor(result1$nppes_provider_state)
+
+
+#'Tx' state has highest number of claim count
+ggplot(result1, aes(result1$nppes_provider_state,result1$total_claim_count, color = Species)) + geom_point()
+
+#filter two drugs Gilenya & Copaxone
+filter(result1, grepl('Gilenya|Copaxone', drug_name))
+
+#classification of Gilenya & Copaxone
+d <- dist(result1, method = "euclidean") # distance matrix
+fit <- hclust(d, method="ward") #hierarchial clustering
+plot(fit) # display dendogram
+groups <- cutree(fit, k=2) # cut tree into 2 clusters
+
+# draw dendogram with red borders around the 2 clusters 
+rect.hclust(fit, k=2, border="red")
