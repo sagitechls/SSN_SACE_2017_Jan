@@ -1,0 +1,177 @@
+# Inferenences
+# The doctor's prescribtion of the drug's avonnex vs copanex is mainly based on claim count,cost of drug,
+# drug supply for a day.
+# Based on this prediction we can identify which doctors will prescribe which drug, from which we can say
+# we can identify at a particular state which drug reign in the upcoming days, based on which we
+# can say increase our supply to our state.
+# if the clients drug is the monopoly in a particular state we can increase the drug cost to increase the base line.
+
+
+# The modelling is done by combining the puf detail and summary along with prescribe detail and summary.
+library(readxl)
+prescriber_detailed <- read_excel("G:/sagitec/prescriber.detailed.xlsx")
+PUF_detailed <- read_excel("G:/sagitec/PUF.detailed.xlsx")
+prescriber_summary <- read_excel("G:/sagitec/prescriber.summary.xlsx")
+PUF_summary <- read_excel("G:/sagitec/PUF.summary.xlsx")
+
+library(dplyr)
+pres_det<-prescriber_detailed %>% 
+  select(doc_id,nppes_provider_city,nppes_provider_state,bene_count,total_claim_count,
+         total_day_supply,total_drug_cost,drug_name) %>% filter(drug_name %in% c("AVONEX","COPAXONE"))
+
+pres_puf<-merge(pres_det,PUF_detailed,by="doc_id")
+pres_puf1<-merge(pres_puf,PUF_summary,by="doc_id")
+pres_puf2<-merge(pres_puf1,prescriber_summary,by="doc_id")
+
+summary(pres_puf2)
+
+write.csv(pres_puf2,"prespuf.csv")
+
+
+str(pres_puf2)
+
+pres_puf2$doc_id<-NULL
+pres_puf2$drug_name<-as.factor(pres_puf2$drug_name)
+pres_puf2$nppes_provider_city.y<-NULL
+pres_puf2$nppes_provider_state.y<-NULL
+pres_puf2$hcpcs_code<-NULL
+pres_puf2$hcpcs_description<-NULL
+pres_puf2$hcpcs_drug_indicator<-as.factor(pres_puf2$hcpcs_drug_indicator)
+pres_puf2$hcpcs_chapter<-NULL
+pres_puf2$hcpcs_class<-pres_puf2$hcpcs_class
+
+
+summary(pres_puf2)
+
+
+library(readr)
+prespuf <- read_csv("~/prespuf.csv", col_types = cols(average_medicare_allowed_amt = col_number(), 
+                                                      average_medicare_payment_amt = col_number(), 
+                                                      average_medicare_standard_amt = col_number(), 
+                                                      average_submitted_chrg_amt = col_number(), 
+                                                      bene_count.x = col_number(), bene_count.y = col_number(), 
+                                                      bene_count_ge65 = col_number(), bene_day_srvc_cnt = col_number(), 
+                                                      bene_unique_cnt = col_number(), beneficiary_average_risk_score = col_number(), 
+                                                      brand_claim_count = col_number(), brand_drug_cost = col_number(), 
+                                                      generic_claim_count = col_number(), generic_drug_cost = col_number(), 
+                                                      line_srvc_cnt = col_number(), number_of_drug_hcpcs = col_number(), 
+                                                      number_of_hcpcs = col_number(), number_of_med_hcpcs = col_number(), 
+                                                      other_claim_count = col_number(), other_drug_cost = col_number(), 
+                                                      total_claim_count.x = col_number(), total_claim_count.y = col_number(), 
+                                                      total_claim_count_ge65 = col_number(), 
+                                                      total_day_supply.x = col_number(), total_day_supply.y = col_number(), 
+                                                      total_day_supply_ge65 = col_number(), 
+                                                      total_drug_cost.x = col_number(), total_drug_cost.y = col_number(), 
+                                                      total_drug_cost_ge65 = col_number(), 
+                                                      total_drug_medicare_allowed_amt = col_number(), 
+                                                      total_drug_services = col_number(), total_med_medicare_allowed_amt = col_number(), 
+                                                      total_med_services = col_number(), total_medicare_allowed_amt = col_number(), 
+                                                      total_services = col_number()))
+
+summary(prespuf)
+
+prespuf$brand_drug_cost<-NULL
+prespuf$generic_drug_cost<-NULL
+prespuf$other_drug_cost<-NULL
+prespuf$other_suppress_flag<-NULL
+prespuf$generic_suppress_flag<-NULL
+prespuf$brand_suppress_flag<-NULL
+prespuf$ge65_suppress_flag<-NULL
+prespuf$bene_count_ge65_suppress_flag<-NULL
+prespuf$hcpcs_class<-as.factor(prespuf$hcpcs_class)
+prespuf$hcpcs_drug_indicator<-as.factor(prespuf$hcpcs_drug_indicator)
+prespuf$drug_name<-as.factor(prespuf$drug_name)
+prespuf$nppes_provider_state<-as.factor(prespuf$nppes_provider_state)
+
+library(caTools)
+set.seed(123)
+prespuf_sample<-sample.split(prespuf$drug_name,SplitRatio = .7)
+prespuf_train<-subset(prespuf,prespuf_sample==T)
+prespuf_test<-subset(prespuf,prespuf_sample==F)
+
+library(randomForest)
+rf<-randomForest(prespuf_train$drug_name~.-doc_id-nppes_provider_city
+                 ,data = prespuf_train,na.action=na.omit)
+
+
+#randomForest(formula = prespuf_train$drug_name ~ . -doc_id -nppes_provider_city, data = prespuf_train, na.action = na.omit) 
+#Type of random forest: classification
+#Number of trees: 500
+#No. of variables tried at each split: 5
+
+#OOB estimate of  error rate: 6.54%
+#Confusion matrix:
+#  AVONEX COPAXONE class.error
+#AVONEX     9895      152  0.01512889
+#COPAXONE   2027    21235  0.08713782
+
+library(caret)
+varImp(rf)
+
+#Overall
+#nppes_provider_state            1414.5352554
+#bene_count.x                     140.176815
+#total_claim_count.x             1451.714077
+#total_day_supply.x              1963.718118
+#total_drug_cost.x               2182.709960
+#hcpcs_drug_indicator               0.919303
+#bene_unique_cnt                   30.724498
+#bene_day_srvc_cnt                 31.972054
+#line_srvc_cnt                     30.693830
+#average_submitted_chrg_amt        39.058218
+#average_medicare_allowed_amt      32.167960
+#average_medicare_payment_amt      32.212492
+#average_medicare_standard_amt     30.451843
+#hcpcs_class                        3.638024
+#number_of_hcpcs                  351.228770
+#number_of_drug_hcpcs             162.394595
+#number_of_med_hcpcs              351.004511
+#total_services                   332.932378
+#total_drug_services              186.263618
+#total_med_services               382.490167
+#total_medicare_allowed_amt       379.776799
+#total_drug_medicare_allowed_amt  200.207122
+#total_med_medicare_allowed_amt   389.402738
+#beneficiary_average_risk_score   388.499060
+#bene_count.y                     341.957892
+#bene_count_ge65                  333.199497
+#total_claim_count_ge65           368.797620
+#total_day_supply.y               344.427271
+#total_day_supply_ge65            341.469932
+#total_drug_cost_ge65             609.563375
+#total_claim_count.y              350.590068
+#brand_claim_count                430.702775
+#generic_claim_count              351.810366
+#other_claim_count                301.295465
+#total_drug_cost.y               1048.713820
+
+prediction<-predict(rf,prespuf_test)
+conf<-confusionMatrix(prediction,prespuf_test$drug_name)
+conf
+
+#Confusion Matrix and Statistics
+
+#        Reference
+#Prediction AVONEX COPAXONE
+#AVONEX     4224      855
+#COPAXONE     73     9154
+
+#Accuracy : 0.9351         
+#95% CI : (0.931, 0.9391)
+#No Information Rate : 0.6996         
+#P-Value [Acc > NIR] : < 2.2e-16      
+
+#Kappa : 0.8533         
+#Mcnemar's Test P-Value : < 2.2e-16      
+
+#Sensitivity : 0.9830         
+#Specificity : 0.9146         
+#Pos Pred Value : 0.8317         
+#Neg Pred Value : 0.9921         
+#Prevalence : 0.3004         
+#Detection Rate : 0.2953         
+#Detection Prevalence : 0.3550         
+#Balanced Accuracy : 0.9488         
+
+#'Positive' Class : AVONEX   
+
