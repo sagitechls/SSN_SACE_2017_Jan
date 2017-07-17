@@ -1,0 +1,91 @@
+#Inferences
+#1 number of unique drugs 1120
+#2 Drugs prescribed by Doctors mostly based on beneficiary_average_risk_score
+#3 Chronic disesases are being prescribed similar drug by most of Doctor's
+
+#packages used 
+setwd("C:\\Users\\anand.shankar\\Desktop\\Sagitec\\Files")
+getwd()
+library(dplyr)
+library(h2o)
+library(data.table)
+library(sqldf)
+library(corrplot)
+library(ggplot)
+#samSPECTRAL is a non-standard package HEceit requires a  different method
+source("https://bioconductor.org/biocLite.R")
+biocLite("samSPECTRAL")
+
+#load the datasets using Fread to reduce complexity of laoding large datasets
+pusummary<-fread("PUF.summary.csv", stringsAsFactors = T)
+
+prescriberdetail<-fread("prescriber.detailed.csv", stringsAsFactors = T)
+
+result1new=scale(result1)#to standardise values
+
+# to merge using doc id as common
+result1 = sqldf("select * from prescriberdetail
+                JOIN PUFdetail USING(doc_id)")
+
+mergedddata = sqldf("select * from result1
+                JOIN PUF.summary USING(doc_id)")
+
+
+#categorize the missing values with "less than 11" as "0" and values greater than 11 as "1"
+mergeddata$bene_count[is.na(mergeddata$bene_count)] <- "0"
+mergeddata$bene_count[mergeddata$bene_count>=11] <- "1"
+
+
+#Descriptive Statistics 
+
+#instead of packages function are written to run code dynamically
+
+#functions to find central tendency in data 
+
+mysummary <- function(x,npar=TRUE,print=TRUE) {
+  if (!npar) {
+    center <- mean(x); spread <- sd(x) 
+  } else {
+    center <- median(x); spread <- mad(x) 
+  }
+  if (print & !npar) {
+    cat("Mean=", center, "\n", "SD=", spread, "\n")
+  } else if (print & npar) {
+    cat("Median=", center, "\n", "MAD=", spread, "\n")
+  }
+  result <- list(center=center,spread=spread)
+  return(result)
+}#data lies withing range of small variations
+
+#correlation plot to find assocaition between variables
+corr  <- function(directory, threshold = 0) {
+  files <- list.files(directory, full.names = T)
+  dat2 <- lapply(files, function(x) na.omit(read.csv(x)))
+  size <- unlist(lapply(dat2, nrow))
+  cors <- lapply(dat2[size > threshold], function(x) cor(x['drugname'], x['beneficary average risk score']))
+  res <- unname(unlist(cors)) 
+}#claim count and total day supply is higly corelated bene_count is co- related with drug cost
+
+
+#clustering to find pattern of drug presription for all the drugs using samSPECTRAL clustering
+unique(drug_name)#1120 drugs were found as unique
+
+
+#Elbow Method for finding the optimal number of clusters
+set.seed(123)
+# Compute and plot wss for k = 2 to k = 1120.
+k.max <- 1120
+mergeddata <- scale(mergeddata)
+wss <- sapply(1:k.max, 
+              function(k){kmeans(data, k, nstart=50,iter.max = 15 )$tot.withinss})
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares") # plot shows the optimal cluster as 700
+
+
+#Spectral Clustering using adjacent matrix it's effficient for larger datasets
+cluster<-spectral.clustering(mergeddata, normalised = TRUE, score = FALSE, K = 500, adj = FALSE)
+
+#plot the clusters to see how it's clustered
+plot(cluster,pch='.',col=output)# total 1120 drugs being come under the 500 group of clusters
