@@ -1,0 +1,294 @@
+require(readxl)
+require(ggplot2)
+require(stringr)
+require(data.table)
+
+setwd("~/Desktop/SSN_SACE_2017_Jan-master")
+
+#File- prescriber_detailed#
+prescriber_detailed <- read_excel("prescriber.detailed.xlsx")
+head(prescriber_detailed)
+sapply(prescriber_detailed,class)
+prescriber_detailed$bene_count <- as.integer(prescriber_detailed$bene_count)
+colSums(is.na(prescriber_detailed)) #bene_count- 256128 NA's found 
+#suppresed values are between 1 and 10 so taken mean
+prescriber_detailed$bene_count[is.na(prescriber_detailed$bene_count)] <- as.integer(mean(1:10)) 
+summary(prescriber_detailed)
+
+#Drug research-preliminary EDA#
+head(prescriber_detailed$drug_name) #special characters present in drug_names
+head(prescriber_detailed$generic_name) 
+sum(grepl('[^[:alnum:]]', prescriber_detailed$drug_name))
+
+#Removing Special characters from Drug_name & Generic_name
+prescriber_detailed$drug_name <- gsub("-"," ",prescriber_detailed$drug_name)
+prescriber_detailed$drug_name <- gsub("/"," ",prescriber_detailed$drug_name)
+prescriber_detailed$generic_name <- gsub("-"," ",prescriber_detailed$generic_name)
+prescriber_detailed$generic_name <- gsub("/"," ",prescriber_detailed$generic_name)
+
+#750 unique gereric drug names
+length(unique(prescriber_detailed$generic_name)) 
+
+#1190 unique drug name which includes both branded and generic
+length(unique(prescriber_detailed$drug_name))
+
+#429 unique gerneric drugs names used in drug names
+length(intersect(prescriber_detailed$drug_name,prescriber_detailed$generic_name)) 
+
+#(not in) function
+'%!in%' <- function(x,y)!('%in%'(x,y)) 
+
+#690 unique brand drug names in drug name
+#---XX--length(unique(prescriber_detailed$drug_name)) - length(intersect(prescriber_detailed$drug_name,prescriber_detailed$generic_name)) 
+length(unique(prescriber_detailed$drug_name)[unique(prescriber_detailed$drug_name) %!in% 
+                                               intersect(prescriber_detailed$drug_name,prescriber_detailed$generic_name)])
+
+#Store the unique_brand_name as vector
+uniq_brand <- unique(prescriber_detailed$drug_name)[unique(prescriber_detailed$drug_name) %!in% 
+                                                      intersect(prescriber_detailed$drug_name,prescriber_detailed$generic_name)]
+uniq_generic <- unique(prescriber_detailed$generic_name)
+
+#Create a new column brand_name
+prescriber_detailed$brand_name[prescriber_detailed$drug_name %in% uniq_brand == T] <- 
+  prescriber_detailed$drug_name[prescriber_detailed$drug_name %in% uniq_brand == T]
+
+#64.3 % of Total Drug prescribed are Branded  & only 35.7 % are generic drug name being prescribed
+mean(is.na(prescriber_detailed$brand_name))
+
+#For Further analysis drug level details required.(out of scope)
+
+#New Features (cost/drug)
+prescriber_detailed$cos_per_drug <- round((prescriber_detailed$total_drug_cost/prescriber_detailed$total_day_supply),2)
+
+#write the file
+write.csv(prescriber_detailed,"prescriber_detailed_feature.csv",row.names = F)
+
+##--Top--#
+#Top 5 Prescribers
+barplot(head(summary(as.factor(prescriber_detailed$doc_id)),n=5))
+
+#Top 5 prescribed Generic Drug
+barplot(head(sort(table(prescriber_detailed$generic_name),decreasing = T),n=5))
+
+#Top 5 prescribed Brand Drug
+barplot(head(sort(table(prescriber_detailed$brand_name),decreasing = T ),n=5))
+
+#Top 5 Prescriber States
+barplot(head(sort(table(prescriber_detailed$nppes_provider_state),decreasing = T),n=5))
+
+#Top 5 Prescriber City
+barplot(head(sort(table(prescriber_detailed$nppes_provider_city),decreasing = T),n=5))
+
+#Top 5 benficiacry count
+barplot(head(sort(prescriber_detailed$bene_count,decreasing = T),n=5))
+
+#Top 5 Total claim count
+barplot(head(sort(prescriber_detailed$total_claim_count,decreasing = T),n=5))
+
+#Top 5 Total day supply
+barplot(head(sort(prescriber_detailed$total_day_supply,decreasing = T),n=5))
+
+#Top 5 costliest branded Drug-- most drug prices differs between a range of values
+prescriber_detailed$brand_name[prescriber_detailed$cos_per_drug %in% 
+                                 head(sort(prescriber_detailed$cos_per_drug[!is.na(prescriber_detailed$brand_name)],decreasing =T))]
+
+#Top 5 costliest generic Drug
+prescriber_detailed$generic_name[prescriber_detailed$cos_per_drug %in% 
+                                   head(sort(prescriber_detailed$cos_per_drug[is.na(prescriber_detailed$brand_name)],decreasing = T))]
+barplot(head(sort(prescriber_detailed$cos_per_drug[(is.na(prescriber_detailed$brand_name))],decreasing = T),n=5))
+
+
+#File - Prescriber_summary
+prescriber_summary <- read_excel("prescriber.summary.xlsx")
+summary(prescriber_summary)
+sapply(prescriber_summary ,class)
+
+
+#Datatype conversion
+prescriber_summary$total_claim_count_ge65 <- as.numeric(prescriber_summary$total_claim_count_ge65)
+prescriber_summary$total_drug_cost_ge65 <- as.numeric(prescriber_summary$total_drug_cost_ge65)
+prescriber_summary$total_day_supply_ge65 <- as.numeric(prescriber_summary$total_day_supply_ge65)
+prescriber_summary$brand_claim_count <- as.numeric(prescriber_summary$brand_claim_count)
+prescriber_summary$brand_drug_cost <- as.numeric(prescriber_summary$brand_drug_cost)
+prescriber_summary$generic_claim_count <- as.numeric(prescriber_summary$generic_claim_count)
+prescriber_summary$generic_drug_cost <- as.numeric(prescriber_summary$generic_drug_cost)
+prescriber_summary$other_claim_count <- as.numeric(prescriber_summary$other_claim_count)
+prescriber_summary$other_drug_cost <- as.numeric(prescriber_summary$other_drug_cost)
+
+prescriber_summary$ge65_suppress_flag <- as.factor(prescriber_summary$ge65_suppress_flag)
+prescriber_summary$bene_count_ge65_suppress_flag <- as.factor(prescriber_summary$bene_count_ge65_suppress_flag)
+prescriber_summary$other_suppress_flag<- as.factor(prescriber_summary$other_suppress_flag)
+prescriber_summary$generic_suppress_flag <- as.factor(prescriber_summary$generic_suppress_flag)
+prescriber_summary$brand_suppress_flag <- as.factor(prescriber_summary$brand_suppress_flag)
+
+#--NA-Treatment--#
+colSums(is.na(prescriber_summary))
+
+# (*) Indicates total_claim_count_ge65  is between 1 and 10
+prescriber_summary$total_claim_count_ge65[is.na(prescriber_summary$total_claim_count_ge65) & prescriber_summary$ge65_suppress_flag == "*"] <- as.integer(mean(1:10)) 
+# (#) indicates less than 65 y.o group is total claim is between 1 and 10
+prescriber_summary$total_claim_count_ge65[is.na(prescriber_summary$total_claim_count_ge65) & prescriber_summary$ge65_suppress_flag == "#"] <- 
+  prescriber_summary$total_claim_count[is.na(prescriber_summary$total_claim_count_ge65) & prescriber_summary$ge65_suppress_flag == "#"] - 5
+
+# (*) Indicates claim_counts is between 1 and 10
+prescriber_summary$brand_claim_count[is.na(prescriber_summary$brand_claim_count) & prescriber_summary$brand_suppress_flag == "*"] <- as.integer(mean(1:10)) 
+prescriber_summary$generic_claim_count[is.na(prescriber_summary$generic_claim_count) & prescriber_summary$generic_suppress_flag == "*"] <-as.integer(mean(1:10))
+prescriber_summary$other_claim_count[is.na(prescriber_summary$other_claim_count) & prescriber_summary$other_suppress_flag == "*"] <- as.integer(mean(1:10))
+
+# (#) Indicates remaining claim_counts is between 1 and 10
+prescriber_summary$brand_claim_count[is.na(prescriber_summary$brand_claim_count) & prescriber_summary$brand_suppress_flag == "#"] <-  
+  prescriber_summary$total_claim_count[is.na(prescriber_summary$brand_claim_count) & prescriber_summary$brand_suppress_flag == "#"] - 
+  (prescriber_summary$generic_claim_count[is.na(prescriber_summary$brand_claim_count) & prescriber_summary$brand_suppress_flag == "#"] + 
+     prescriber_summary$other_claim_count[is.na(prescriber_summary$brand_claim_count) & prescriber_summary$brand_suppress_flag == "#"])
+
+prescriber_summary$generic_claim_count[is.na(prescriber_summary$generic_claim_count) & prescriber_summary$generic_suppress_flag == "#"] <- 
+  prescriber_summary$total_claim_count[is.na(prescriber_summary$generic_claim_count) & prescriber_summary$generic_suppress_flag == "#"] - 
+  (prescriber_summary$brand_claim_count[is.na(prescriber_summary$generic_claim_count) & prescriber_summary$generic_suppress_flag == "#"]+ 
+     prescriber_summary$other_claim_count[is.na(prescriber_summary$generic_claim_count) & prescriber_summary$generic_suppress_flag == "#"])
+
+prescriber_summary$other_claim_count[is.na(prescriber_summary$other_claim_count) & prescriber_summary$other_suppress_flag == "#"] <- 
+  prescriber_summary$total_claim_count[is.na(prescriber_summary$other_claim_count) & prescriber_summary$other_suppress_flag == "#"] - 
+  (prescriber_summary$brand_claim_count[is.na(prescriber_summary$other_claim_count) & prescriber_summary$other_suppress_flag == "#"]+ 
+     prescriber_summary$generic_claim_count[is.na(prescriber_summary$other_claim_count) & prescriber_summary$other_suppress_flag == "#"])
+
+#cost of drug value are still suppressed. what can be done?
+colSums(is.na(prescriber_summary))
+
+#Removing flag column
+prescriber_summary<- prescriber_summary[,-c(9,11,15,18,21)] 
+summary(prescriber_summary)
+
+#write file
+write.csv(prescriber_summary,"Prescriber_Summary_No_flag.csv",row.names = F)
+
+#--File--PUF.Deatiled--#
+puf_detailed <- read_excel("PUF.detailed.xlsx")
+head(puf_detailed)
+summary(puf_detailed)
+colSums(is.na(puf_detailed)) # no null values
+
+#--File--PUF.summary--#
+puf_summary <- read_excel("PUF.summary.xlsx")
+head(puf_summary)
+sapply(puf_summary,class)
+summary(puf_summary)
+puf_summary$number_of_drug_hcpcs <- as.numeric(puf_summary$number_of_drug_hcpcs)
+puf_summary$total_drug_services <- as.numeric(puf_summary$total_drug_services)
+puf_summary$total_drug_medicare_allowed_amt <- as.numeric(puf_summary$total_drug_medicare_allowed_amt)
+puf_summary$number_of_med_hcpcs <- as.numeric(puf_summary$number_of_med_hcpcs)
+puf_summary$total_med_services <- as.numeric(puf_summary$total_med_services)
+puf_summary$total_med_medicare_allowed_amt <- as.numeric(puf_summary$total_med_medicare_allowed_amt)
+
+colSums(is.na(puf_summary)) #2140 doctors doesn't provide drug & med services?
+
+
+#File Pres_Cons(e.g. for dataset creation)
+pres_conso <- read_excel("PUF_pres_conso.xlsx")
+summary(pres_conso)
+pres_conso$diagnostic <- as.numeric(pres_conso$diagnostic)
+pres_conso$other <- as.numeric(pres_conso$other)
+pres_conso$diagnostic_services_percentage <- as.numeric(pres_conso$diagnostic_services_percentage)
+pres_conso$other_services_percentage <- as.numeric(pres_conso$other_services_percentage)
+pres_conso$diagnostic_services_rank_in_his_speciality <- as.numeric(pres_conso$diagnostic_services_rank_in_his_speciality)
+pres_conso$other_services_rank_in_his_speciality <- as.numeric(pres_conso$other_services_rank_in_his_speciality)
+pres_conso$top1_drug_cost_prescribed <- as.numeric(pres_conso$top1_drug_cost_prescribed)
+pres_conso$top2_drug_cost_prescribed <- as.numeric(pres_conso$top2_drug_cost_prescribed)
+pres_conso$top3_drug_cost_prescribed <- as.numeric(pres_conso$top3_drug_cost_prescribed)
+pres_conso$top4_drug_cost_prescribed <- as.numeric(pres_conso$top4_drug_cost_prescribed)
+pres_conso$top5_drug_cost_prescribed <- as.numeric(pres_conso$top5_drug_cost_prescribed)
+pres_conso$branded_drugs_cost_percentage <- as.numeric(pres_conso$branded_drugs_cost_percentage)
+pres_conso$generic_drugs_cost_percentage <- as.numeric(pres_conso$generic_drugs_cost_percentage)
+pres_conso$bene_count <- as.numeric(pres_conso$bene_count)
+pres_conso$total_claim_count <- as.numeric(pres_conso$total_claim_count)
+pres_conso$total_drug_cost <-as.numeric(pres_conso$total_drug_cost)
+pres_conso$total_day_supply <- as.numeric(pres_conso$total_day_supply)
+pres_conso$brand_drug_cost <- as.numeric(pres_conso$brand_drug_cost)
+pres_conso$brand_claim_count <- as.numeric(pres_conso$brand_claim_count)
+pres_conso$generic_claim_count <- as.numeric(pres_conso$generic_claim_count)
+pres_conso$generic_drug_cost <- as.numeric(pres_conso$generic_drug_cost)
+pres_conso$other_claim_count <- as.numeric(pres_conso$other_claim_count)
+pres_conso$other_drug_cost <- as.numeric(pres_conso$other_drug_cost)
+colSums(is.na(pres_conso))#so many NA which can be treated only after defining the problem statement
+
+
+#Classification "GILENYA" vs "COPAXONE"
+
+#--dataset creation--#
+
+#Merge
+pres_features <- read.csv("prescriber_detailed_feature.csv")
+summary(pres_features)
+
+#Filter records with only "GILENYA" & "COPAXONE" as brand name in Prescriber detailed file
+dt_pres_features <- data.table(pres_features)
+dt_pres_brands <- dt_pres_features[dt_pres_features$brand_name == "GILENYA" | dt_pres_features$brand_name == "COPAXONE"]
+
+#Merge it with consolidate file derived from (PUF & prescriber files)
+m1_Puf_pres_conso_brand <- merge(dt_pres_brands,pres_conso,by = "doc_id")
+write.csv(m1_Puf_pres_conso_brand,"Puf_pres_conso_brand.csv",row.names = F)
+summary(m1_Puf_pres_conso_brand)
+colSums(is.na(m1_Puf_pres_conso_brand))
+
+#Remove city & state - redundant column
+m1_Puf_pres_conso_brand <- m1_Puf_pres_conso_brand[,-c(12,13)]
+
+#--missing value treatment--#
+#Total service count is the sum of (diagnostic,therapeutic & others counts)
+sum(is.na(m1_Puf_pres_conso_brand$total_services_count)) #no null values
+
+m1_Puf_pres_conso_brand$therapeutic[is.na(m1_Puf_pres_conso_brand$therapeutic)] <- 0
+m1_Puf_pres_conso_brand$diagnostic[is.na(m1_Puf_pres_conso_brand$diagnostic) & is.na(m1_Puf_pres_conso_brand$other)] <- 0
+m1_Puf_pres_conso_brand$other[is.na(m1_Puf_pres_conso_brand$other) & m1_Puf_pres_conso_brand$diagnostic == 0] <- 0
+
+m1_Puf_pres_conso_brand$diagnostic[is.na(m1_Puf_pres_conso_brand$diagnostic)] <- 
+  (m1_Puf_pres_conso_brand$total_services_count[is.na(m1_Puf_pres_conso_brand$diagnostic)]) - 
+  (m1_Puf_pres_conso_brand$therapeutic[is.na(m1_Puf_pres_conso_brand$diagnostic)] + 
+     m1_Puf_pres_conso_brand$other[is.na(m1_Puf_pres_conso_brand$diagnostic)])
+
+m1_Puf_pres_conso_brand$other[is.na(m1_Puf_pres_conso_brand$other)] <- 
+  (m1_Puf_pres_conso_brand$total_services_count[is.na(m1_Puf_pres_conso_brand$other)]) - 
+  (m1_Puf_pres_conso_brand$therapeutic[is.na(m1_Puf_pres_conso_brand$other)] + 
+     m1_Puf_pres_conso_brand$diagnostic[is.na(m1_Puf_pres_conso_brand$other)])
+
+#Imputing missing value for the precentage of various services
+m1_Puf_pres_conso_brand$diagnostic_services_percentage[is.na(m1_Puf_pres_conso_brand$diagnostic_services_percentage)] <-
+  (m1_Puf_pres_conso_brand$diagnostic[is.na(m1_Puf_pres_conso_brand$diagnostic_services_percentage)] / 
+     m1_Puf_pres_conso_brand$total_services_count[is.na(m1_Puf_pres_conso_brand$diagnostic_services_percentage)]) * 100
+
+m1_Puf_pres_conso_brand$other_services_percentage[is.na(m1_Puf_pres_conso_brand$other_services_percentage)] <- 
+  (m1_Puf_pres_conso_brand$other[is.na(m1_Puf_pres_conso_brand$other_services_percentage)]/
+     m1_Puf_pres_conso_brand$total_services_count[is.na(m1_Puf_pres_conso_brand$other_services_percentage)]) * 100
+
+m1_Puf_pres_conso_brand$therapeutic_services_percentage[is.na(m1_Puf_pres_conso_brand$therapeutic_services_percentage)] <- 
+  (m1_Puf_pres_conso_brand$therapeutic[is.na(m1_Puf_pres_conso_brand$therapeutic_services_percentage)]/
+     m1_Puf_pres_conso_brand$total_services_count[is.na(m1_Puf_pres_conso_brand$therapeutic_services_percentage)]) * 100
+
+#Brand,generic,others claim count (from pres_summary)
+pres_sum<-read.csv("Prescriber_Summary_No_flag.csv")
+m2<-merge(m1_Puf_pres_conso_brand,pres_sum, by= "doc_id")
+colSums(is.na(m2))
+
+
+#Again Remove redundant columns
+dt_m2<- data.table(m2)
+colSums(is.na(dt_m2))
+
+dt_m3<-dt_m2[,c("city","state","therapeutic_services_rank_in_his_speciality","diagnostic_services_rank_in_his_speciality",
+         "other_services_rank_in_his_speciality","top1_drug_prescribed","top2_drug_prescribed","top3_drug_prescribed",
+         "top4_drug_prescribed","top5_drug_prescribed","top1_drug_cost_prescribed","top2_drug_cost_prescribed",
+         "top3_drug_cost_prescribed","top4_drug_cost_prescribed","top5_drug_cost_prescribed","bene_count.y",
+         "total_claim_count.y","total_drug_cost.y","total_day_supply.y","brand_claim_count.x","brand_drug_cost.x",
+         "generic_claim_count.x","other_claim_count.x","other_drug_cost.x","nppes_provider_city.y",
+         "nppes_provider_state.y","generic_drug_cost.x"):=NULL]
+
+colSums(is.na(dt_m3))
+
+df1<-dt_m3
+df2<-df1[(!is.na(df1$brand_drug_cost.y)) & (!is.na(df1$generic_drug_cost.y)) & (!is.na(df1$total_drug_cost_ge65)) & 
+           (!is.na(df1$other_drug_cost.y))] 
+colSums(is.na(df2))#NO MISSING Values!!
+
+#Write the 'FINAL' dataset for analysis
+write.csv(df2,"GILENYA_COPAXONE_conso.csv",row.names = F)
+gil_cop_conso <- read.csv("GILENYA_COPAXONE_conso.csv")
+summary(gil_cop_conso)
