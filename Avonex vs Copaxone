@@ -1,0 +1,109 @@
+# Data merged from prescriber_detailed and puf_detailed with the drug name as target
+# Classification of Avonex vs Copaxone
+# Accuracy is of 70%, the model can be further improved by better variable selection and algorithm selections
+
+#File inserts
+prescriber_detailed <- read_excel("G:/sagitec/prescriber.detailed.xlsx")
+PUF_detailed <- read_excel("G:/sagitec/PUF.detailed.xlsx")
+
+summary(prescriber_detailed)
+summary(PUF_detailed)
+
+#Data Segmentation 
+puf<-PUF_detailed %>%
+  select(doc_id,bene_unique_cnt,bene_day_srvc_cnt,line_srvc_cnt,average_submitted_chrg_amt,
+         average_medicare_allowed_amt,average_medicare_payment_amt,average_medicare_standard_amt,
+         hcpcs_class,hcpcs_drug_indicator)
+
+
+# Data Merging 
+pres_puf<-merge(prescriber,puf,by="doc_id")
+
+write.csv(pres_puf,"pres_puf.csv")
+
+
+summary(pres_puf)
+
+#Data Conversion
+pres_puf$hcpcs_class<-as.factor(pres_puf$hcpcs_class)
+pres_puf$hcpcs_drug_indicator<-as.factor(pres_puf$hcpcs_drug_indicator)
+pres_puf$drug_name<-as.factor(pres_puf$drug_name)
+pres_puf$nppes_provider_state<-as.factor(pres_puf$nppes_provider_state)
+
+# Correlation
+correlation<-pres_puf %>%
+  select(bene_count,bene_unique_cnt,bene_day_srvc_cnt,total_claim_count,total_day_supply,total_drug_cost,
+         line_srvc_cnt,average_submitted_chrg_amt,average_medicare_allowed_amt,average_medicare_payment_amt,
+         average_medicare_standard_amt)
+
+# Correlation
+corplot<-cor(correlation)
+corrplot(corplot)
+#bene_count is positively correlated to day supply,cost and claim count
+#Claim count has positively correlated to supply and cost
+
+# Modelling
+library(caTools)
+set.seed(123)
+prespuf_sample<-sample.split(prescriber$drug_name,SplitRatio = .7)
+prespuf_train<-subset(pres_puf,prespuf_sample==T)
+prespuf_test<-subset(pres_puf,prespuf_sample==F)
+
+
+# Model using Random Forest Algorithm
+rf<-randomForest(prespuf_train$drug_name~.-doc_id-nppes_provider_city,data = prespuf_train)
+
+# Variable Importane
+varImp(rf)
+
+#                                  Overall
+#nppes_provider_state          2324.653160
+#bene_count                     117.123070
+#total_claim_count             2768.333125
+#total_day_supply              4622.506207
+#total_drug_cost               4337.691341
+#bene_unique_cnt                519.863907
+#bene_day_srvc_cnt              509.216288
+#line_srvc_cnt                  514.005368
+#average_submitted_chrg_amt     681.912144
+#average_medicare_allowed_amt   566.843620
+#average_medicare_payment_amt   597.948206
+#average_medicare_standard_amt  591.334638
+#hcpcs_class                     52.850718
+#hcpcs_drug_indicator             6.901339
+
+
+#It can be seen that provider state,cost and supply are the major influencers in the prescribing of the drugs
+
+prediction<-predict(rf,prespuf_test)
+conf<-confusionMatrix(prediction,prespuf_test$drug_name)
+conf
+
+#Confusion Matrix and Statistics
+
+#          Reference
+#Prediction AVONEX COPAXONE
+#  AVONEX     5356     5171
+#  COPAXONE    325     7945
+                                          
+ #              Accuracy : 0.7076          
+ #                95% CI : (0.7011, 0.7141)
+ #   No Information Rate : 0.6978          
+ #   P-Value [Acc > NIR] : 0.001649        
+                                          
+ #                Kappa : 0.4417          
+ #Mcnemar's Test P-Value : < 2.2e-16       
+                                          
+ #          Sensitivity : 0.9428          
+ #           Specificity : 0.6057          
+ #        Pos Pred Value : 0.5088          
+ #        Neg Pred Value : 0.9607          
+ #            Prevalence : 0.3022          
+ #        Detection Rate : 0.2849          
+ # Detection Prevalence : 0.5600          
+ #     Balanced Accuracy : 0.7743          
+                                          
+ #     'Positive' Class : AVONEX   
+
+
+
