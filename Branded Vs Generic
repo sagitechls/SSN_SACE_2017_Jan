@@ -1,0 +1,79 @@
+# Inference, A Doctor's prescribtion of branded or generic drug depends on bene_count, bene_count_ge65, total_claim_count, 
+# total_drug_cost, cost's and claim count's of drug and generic drugs, supply of drugs happening in a day.
+
+
+library(readxl)
+prescriber_detailed_brand_generic <- read_excel("G:/sagitec/prescriber.detailed_brand_generic.xlsx", 
+                                                col_types = c("text", "text", "text", 
+                                                              "blank", "blank", "text", "blank", 
+                                                              "blank", "blank", "blank"))
+
+prescriber_summary <- read_excel("G:/sagitec/prescriber.summary.xlsx", 
+                                 col_types = c("text", "blank", "blank", 
+                                               "numeric", "numeric", "blank", "numeric", 
+                                               "blank", "numeric", "numeric", "numeric", 
+                                               "numeric", "numeric", "numeric", 
+                                               "blank", "numeric", "numeric", "blank", 
+                                               "numeric", "numeric", "blank", "numeric"))
+
+
+summary(prescriber_detailed_brand_generic)
+prescriber_detailed_brand_generic$`Brand/Generic`<-as.factor(prescriber_detailed_brand_generic$`Brand/Generic`)
+prescriber_detailed_brand_generic$nppes_provider_city<-NULL
+
+library(tidyr)
+
+prescriber_summary<-prescriber_summary %>% drop_na()
+summary(prescriber_summary)
+
+merge_prescriber<-merge(prescriber_detailed_brand_generic,prescriber_summary,by="doc_id")
+merge_prescriber$nppes_provider_state<-as.factor(merge_prescriber$nppes_provider_state)
+merge_prescriber$nppes_provider_state<-NULL
+merge_prescriber$doc_id<-NULL
+summary(merge_prescriber)
+
+# Modelling with brand/generic as target
+
+library(caTools)
+set.seed(123)
+prespuf_sample<-sample.split(merge_prescriber$`Brand/Generic`,SplitRatio = .6)
+train<-subset(merge_prescriber,prespuf_sample==T)
+test<-subset(merge_prescriber,prespuf_sample==F)
+
+library(randomForest)
+library(caret)
+
+
+rm<-randomForest(train$`Brand/Generic`~.,data = train)
+
+prediction<-predict(rm,test)
+conf<-confusionMatrix(prediction,test$`Brand/Generic`)
+conf
+
+
+
+#Confusion Matrix and Statistics
+
+#Reference
+#Prediction Branded Generic
+#Branded     292     674
+#Generic   22744   78098
+
+#Accuracy : 0.77            
+#95% CI : (0.7674, 0.7726)
+#No Information Rate : 0.7737          
+#P-Value [Acc > NIR] : 0.9979          
+
+
+#Mcnemar's Test P-Value : <2e-16          
+                                          
+#           Sensitivity : 0.012676        
+#          Specificity : 0.991444        
+#        Pos Pred Value : 0.302277        
+#       Neg Pred Value : 0.774459        
+#        Prevalence : 0.226269        
+#         Detection Rate : 0.002868        
+#     Detection Prevalence : 0.009488        
+#      Balanced Accuracy : 0.502060        
+                                          
+#    'Positive' Class : Branded    
